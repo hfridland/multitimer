@@ -18,7 +18,7 @@ public interface MultitimerDao {
     @Query("delete from timeritem where id = :id")
     void deleteTimerItem(int id);
 
-    @Query("select * from TimerItem")
+    @Query("select * from TimerItem order by active desc, name")
     List<TimerItem> getTimerItems();
 
     @Query("select * from TimerItem where active = 1")

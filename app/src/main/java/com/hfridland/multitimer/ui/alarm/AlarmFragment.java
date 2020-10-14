@@ -64,8 +64,10 @@ public class AlarmFragment extends Fragment {
             getActivity().setTitle("Timer Alarm");
 
             Intent intent = getActivity().getIntent();
-            mTimerItem = (TimerItem) intent.getSerializableExtra(TIMER_ITEM);
-            mTvAlarmMsg.setText(mTimerItem.getName());
+
+            String name = intent.getStringExtra("NAME");
+//            mTimerItem = (TimerItem) intent.getSerializableExtra(TIMER_ITEM);
+            mTvAlarmMsg.setText(name);
 
             mAudioManager = (AudioManager) getContext().getSystemService(Context.AUDIO_SERVICE);
             mAudioManagerMode = mAudioManager.getMode();

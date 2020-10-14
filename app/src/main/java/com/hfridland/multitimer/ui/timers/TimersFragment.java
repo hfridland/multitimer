@@ -1,8 +1,15 @@
 package com.hfridland.multitimer.ui.timers;
 
+import android.app.AlarmManager;
+import android.app.KeyguardManager;
+import android.app.PendingIntent;
+import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.graphics.PixelFormat;
+import android.os.Build;
 import android.os.Bundle;
+import android.os.PowerManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.DialogFragment;
@@ -15,6 +22,8 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.Window;
+import android.view.WindowManager;
 
 import com.hfridland.multitimer.AppDelegate;
 import com.hfridland.multitimer.R;
@@ -69,6 +78,9 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
     private TickReceiver mTickReceiver;
     private IntentFilter mIntentFilter;
 
+    private PowerManager mPowerManager;
+    PowerManager.WakeLock  mWakeLock;
+
     @Override
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
@@ -80,6 +92,12 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
 
         mTickReceiver = new TickReceiver(this);
         mIntentFilter = new IntentFilter(TickReceiver.TICK_ACTION);
+
+        mPowerManager = (PowerManager) getActivity().getSystemService(Context.POWER_SERVICE);
+        mWakeLock = mPowerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK |
+                PowerManager.ACQUIRE_CAUSES_WAKEUP |
+                PowerManager.ON_AFTER_RELEASE, "appname::WakeLock");
+
     }
 
     @Override
@@ -152,8 +170,6 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
         mRecyclerView.setAdapter(mTimersAdapter);
 
         if (getActivity() != null) {
-            //getActivity().setTitle("Timers");
-
             Intent intent = getActivity().getIntent();
             if (intent != null) {
                 String action = intent.getAction();
@@ -163,14 +179,30 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                 if (timerItem != null) {
                     intent.setAction("");
 
+
+                    //acquire will turn on the display
+                    mWakeLock.acquire();
+
+                    //release will release the lock from CPU, in case of that, screen will go back to sleep mode in defined time bt device settings
+                    mWakeLock.release();
+
+                    Context context = getActivity().getApplicationContext();
+                    AlarmManager am =(AlarmManager)context.getSystemService(Context.ALARM_SERVICE);
+
+                    Intent wakeIntent = new Intent(getActivity(), AlarmActivity.class);
+                    wakeIntent.putExtra("NAME", timerItem.getName());
+                    PendingIntent pendingIntent = PendingIntent.getActivity(getActivity(),
+                            12345, wakeIntent, PendingIntent.FLAG_CANCEL_CURRENT);
+                    am.set(AlarmManager.RTC_WAKEUP, 0, pendingIntent);
+
                     if (mStorage.getActiveTimerItems().isEmpty()) {
                         Intent intentClose = new Intent(getContext(), TickService.class);
                         getActivity().stopService(intentClose);
                     }
 
-                    Intent launchIntent = new Intent(getActivity(), AlarmActivity.class);
-                    launchIntent.putExtra(AlarmFragment.TIMER_ITEM, timerItem);
-                    getActivity().startActivity(launchIntent);
+//                    Intent launchIntent = new Intent(getActivity(), AlarmActivity.class);
+//                    launchIntent.putExtra(AlarmFragment.TIMER_ITEM, timerItem);
+//                    getActivity().startActivity(launchIntent);
                 }
             }
         }
