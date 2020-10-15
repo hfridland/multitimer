@@ -16,9 +16,13 @@ import android.widget.EditText;
 
 import com.hfridland.multitimer.AppDelegate;
 import com.hfridland.multitimer.R;
-import com.hfridland.multitimer.data.Storage;
+import com.hfridland.multitimer.data.database.MultitimerDao;
 import com.hfridland.multitimer.data.model.TimerItem;
 import com.hfridland.multitimer.ui.timers.TimersActivity;
+
+import io.reactivex.Single;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.schedulers.Schedulers;
 
 public class TimeEditorDialogFragment extends DialogFragment {
     private TimerItem mTimerItem;
@@ -32,9 +36,26 @@ public class TimeEditorDialogFragment extends DialogFragment {
     @Override
     public Dialog onCreateDialog(@Nullable Bundle savedInstanceState) {
         int id = getArguments().getInt("id");
-        final Storage storage = AppDelegate.getStorage();
+        final MultitimerDao multitimerDao = AppDelegate.getMultitimerDao();
         if (id >= 0) {
-            mTimerItem = storage.getTimerItemById(id);
+            multitimerDao.getTimerItemByIdRx(id)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(timerItem -> {
+                    mTimerItem = timerItem;
+
+                    mEtName.setText(mTimerItem.getName());
+
+                    int duration = mTimerItem.getDurationSec();
+                    int h = duration / 3600;
+                    duration %= 3600;
+                    int m = duration / 60;
+                    int s = duration % 60;
+
+                    mEtHour.setText(String.format("%02d", h));
+                    mEtMin.setText(String.format("%02d", m));
+                    mEtSec.setText(String.format("%02d", s));
+                });
         }
 
         AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
@@ -52,8 +73,12 @@ public class TimeEditorDialogFragment extends DialogFragment {
                         mTimerItem.setName(mEtName.getText().toString());
                         mTimerItem.setDurationSec(getDurationSec());
 
-                        storage.saveTimerItem(mTimerItem);
-                        mListener.onDialogPositiveClick(TimeEditorDialogFragment.this);
+                        Single.fromCallable(() -> multitimerDao.insertTimerItem(mTimerItem))
+                            .subscribeOn(Schedulers.io())
+                            .observeOn(AndroidSchedulers.mainThread())
+                            .subscribe(id -> {
+                                mListener.onDialogPositiveClick(TimeEditorDialogFragment.this);
+                            });
                     }
                 })
                 .setNegativeButton("Cancel", new DialogInterface.OnClickListener() {
@@ -113,21 +138,6 @@ public class TimeEditorDialogFragment extends DialogFragment {
         mEtSec  = v.findViewById(R.id.et_sec);
         mEtSec.setOnKeyListener(mDigitOnKeyListener);
         mEtSec.setOnFocusChangeListener(mDigitOnFocusChangeListener);
-
-        if (mTimerItem == null) return;
-
-        mEtName.setText(mTimerItem.getName());
-
-        int duration = mTimerItem.getDurationSec();
-        int h = duration / 3600;
-        duration %= 3600;
-        int m = duration / 60;
-        int s = duration % 60;
-
-        mEtHour.setText(String.format("%02d", h));
-        mEtMin.setText(String.format("%02d", m));
-        mEtSec.setText(String.format("%02d", s));
-
     }
 
     @Override

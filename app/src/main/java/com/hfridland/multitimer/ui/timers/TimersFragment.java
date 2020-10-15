@@ -1,13 +1,10 @@
 package com.hfridland.multitimer.ui.timers;
 
 import android.app.AlarmManager;
-import android.app.KeyguardManager;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.graphics.PixelFormat;
-import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.support.annotation.NonNull;
@@ -22,12 +19,10 @@ import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
-import android.view.Window;
-import android.view.WindowManager;
 
 import com.hfridland.multitimer.AppDelegate;
 import com.hfridland.multitimer.R;
-import com.hfridland.multitimer.data.Storage;
+import com.hfridland.multitimer.data.database.MultitimerDao;
 import com.hfridland.multitimer.data.model.TimerItem;
 import com.hfridland.multitimer.ticker.AlarmReceiver;
 import com.hfridland.multitimer.ticker.TickReceiver;
@@ -37,27 +32,33 @@ import com.hfridland.multitimer.ui.alarm.AlarmActivity;
 import com.hfridland.multitimer.ui.alarm.AlarmFragment;
 import com.hfridland.multitimer.ui.dialogs.TimeEditorDialogFragment;
 
+import io.reactivex.Single;
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.schedulers.Schedulers;
+
 public class TimersFragment extends Fragment implements TimeEditorDialogFragment.NoticeDialogListener, TickReceiver.Ticker {
     private RecyclerView mRecyclerView;
     private TimersAdapter mTimersAdapter;
-    private final Storage mStorage = AppDelegate.getStorage();
+    private final MultitimerDao mMultitimerDao = AppDelegate.getMultitimerDao();
     private TimersAdapter.OnTimerItemClickListener mOnTimerItemClickListener = new TimersAdapter.OnTimerItemClickListener() {
 
         @Override
         public void onStartStopClick(int id) {
-            TimerItem timerItem = mStorage.getTimerItemById(id);
-            timerItem.setActive(!timerItem.isActive());
-            mStorage.saveTimerItem(timerItem);
-            mTimersAdapter.updateData();
-            if (timerItem.isActive()) {
-                Intent intent = new Intent(getContext(), TickService.class);
-                getActivity().startService(intent);
-            } else {
-                if (mStorage.getActiveTimerItems().isEmpty()) {
-                    Intent intentClose = new Intent(getContext(), TickService.class);
-                    getActivity().stopService(intentClose);
-                }
-            }
+            Single.fromCallable(() -> mMultitimerDao.changeActive(id))
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(timerItem -> {
+                    mTimersAdapter.updateData();
+                    if (timerItem.isActive()) {
+                        Intent intent = new Intent(getContext(), TickService.class);
+                        getActivity().startService(intent);
+                    } else {
+                        if (mMultitimerDao.getActiveTimerItems().isEmpty()) {
+                            Intent intentClose = new Intent(getContext(), TickService.class);
+                            getActivity().stopService(intentClose);
+                        }
+                    }
+                });
         }
 
         @Override
@@ -71,8 +72,12 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
 
         @Override
         public void onDeleteClick(int id) {
-            mStorage.deleteTimerItem(id);
-            mTimersAdapter.updateData();
+            Single.fromCallable(() -> mMultitimerDao.deleteTimerItem(id))
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(n -> {
+                    mTimersAdapter.updateData();
+                });
         }
     };
     private TickReceiver mTickReceiver;
@@ -85,10 +90,15 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
     public void onCreate(@Nullable Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
 
-        if (!mStorage.getActiveTimerItems().isEmpty()) {
-            Intent intent = new Intent(getContext(), TickService.class);
-            getActivity().startService(intent);
-        }
+        mMultitimerDao.getActiveTimerItemsRx()
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(timerItems -> {
+                if (!timerItems.isEmpty()) {
+                    Intent intent = new Intent(getContext(), TickService.class);
+                    getActivity().startService(intent);
+                }
+            });
 
         mTickReceiver = new TickReceiver(this);
         mIntentFilter = new IntentFilter(TickReceiver.TICK_ACTION);
@@ -195,14 +205,15 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                             12345, wakeIntent, PendingIntent.FLAG_CANCEL_CURRENT);
                     am.set(AlarmManager.RTC_WAKEUP, 0, pendingIntent);
 
-                    if (mStorage.getActiveTimerItems().isEmpty()) {
-                        Intent intentClose = new Intent(getContext(), TickService.class);
-                        getActivity().stopService(intentClose);
-                    }
-
-//                    Intent launchIntent = new Intent(getActivity(), AlarmActivity.class);
-//                    launchIntent.putExtra(AlarmFragment.TIMER_ITEM, timerItem);
-//                    getActivity().startActivity(launchIntent);
+                    mMultitimerDao.getActiveTimerItemsRx()
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(timerItems -> {
+                            if (timerItems.isEmpty()) {
+                                Intent intentClose = new Intent(getContext(), TickService.class);
+                                getActivity().stopService(intentClose);
+                            }
+                        });
                 }
             }
         }

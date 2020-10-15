@@ -3,18 +3,19 @@ package com.hfridland.multitimer.ui.timers;
 import android.support.annotation.NonNull;
 import android.support.v7.widget.RecyclerView;
 import android.view.LayoutInflater;
-import android.view.View;
 import android.view.ViewGroup;
 
 import com.hfridland.multitimer.AppDelegate;
-import com.hfridland.multitimer.R;
 
-import com.hfridland.multitimer.data.Storage;
+import com.hfridland.multitimer.data.database.MultitimerDao;
 import com.hfridland.multitimer.data.model.TimerItem;
 import com.hfridland.multitimer.databinding.TimerItemBinding;
 
 import java.util.ArrayList;
 import java.util.List;
+
+import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.schedulers.Schedulers;
 
 public class TimersAdapter extends RecyclerView.Adapter<TimersHolder> {
     @NonNull
@@ -46,10 +47,15 @@ public class TimersAdapter extends RecyclerView.Adapter<TimersHolder> {
     }
 
     public void updateData() {
-        mTimerItems.clear();
-        final Storage storage = AppDelegate.getStorage();
-        mTimerItems.addAll(storage.getTimerItems());
-        notifyDataSetChanged();
+        final MultitimerDao multitimerDao = AppDelegate.getMultitimerDao();
+        multitimerDao.getTimerItemsRx()
+            .subscribeOn(Schedulers.io())
+            .observeOn(AndroidSchedulers.mainThread())
+            .subscribe(timerItems -> {
+                mTimerItems.clear();
+                mTimerItems.addAll(timerItems);
+                notifyDataSetChanged();
+            });
     }
 
     public interface OnTimerItemClickListener {

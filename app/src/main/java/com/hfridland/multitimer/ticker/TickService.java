@@ -14,7 +14,7 @@ import android.os.IBinder;
 import android.support.v4.app.NotificationCompat;
 
 import com.hfridland.multitimer.AppDelegate;
-import com.hfridland.multitimer.data.Storage;
+import com.hfridland.multitimer.data.database.MultitimerDao;
 import com.hfridland.multitimer.data.model.TimerItem;
 
 import java.util.List;
@@ -26,7 +26,6 @@ import com.hfridland.multitimer.R;
 import com.hfridland.multitimer.ui.alarm.AlarmFragment;
 import com.hfridland.multitimer.ui.timers.TimersActivity;
 
-import static com.hfridland.multitimer.utils.StringUtils.duration2String;
 import static java.lang.Math.round;
 
 public class TickService extends Service {
@@ -88,12 +87,12 @@ public class TickService extends Service {
     public int onStartCommand(Intent intent, int flags, int startId) {
         startForeground(1, getNotification(""));
 
-        final Storage storage = AppDelegate.getStorage();
+        final MultitimerDao multitimerDao = AppDelegate.getMultitimerDao();
 
         mScheduledExecutorService.scheduleAtFixedRate(new Runnable() {
             @Override
             public void run() {
-                List<TimerItem> timerItems = storage.getActiveTimerItems();
+                List<TimerItem> timerItems = multitimerDao.getActiveTimerItems();
                 if (!timerItems.isEmpty()) {
                     mManager.notify(1, getNotification("" + timerItems.size() + " active timers" ));
                     TimerItem expiredItem = null;
@@ -109,7 +108,7 @@ public class TickService extends Service {
 
                     if (expiredItem != null) {
                         expiredItem.setActive(false);
-                        storage.saveTimerItem(expiredItem);
+                        multitimerDao.insertTimerItem(expiredItem);
 
                         Intent intentAlarm = new Intent(AlarmReceiver.ALARM_ACTION);
                         intentAlarm.putExtra(AlarmFragment.TIMER_ITEM, expiredItem);
