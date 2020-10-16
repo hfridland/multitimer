@@ -19,6 +19,7 @@
         android:id="@+id/imageView"
         android:layout_width="match_parent"
         android:layout_height="332dp"
+        app:srcCompat="@drawable/avatar"
         />
 
     <TextView
@@ -30,4 +31,5 @@
         android:autoLink="all"
         android:textColor="@color/colorPrimaryDark"
         android:text="@string/about_descr" />
+
 </LinearLayout>
