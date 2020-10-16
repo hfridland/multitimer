@@ -53,10 +53,15 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                         Intent intent = new Intent(getContext(), TickService.class);
                         getActivity().startService(intent);
                     } else {
-                        if (mMultitimerDao.getActiveTimerItems().isEmpty()) {
-                            Intent intentClose = new Intent(getContext(), TickService.class);
-                            getActivity().stopService(intentClose);
-                        }
+                        mMultitimerDao.getActiveTimerItemsRx()
+                            .subscribeOn(Schedulers.io())
+                            .observeOn(AndroidSchedulers.mainThread())
+                            .subscribe(timerItems -> {
+                                if (timerItems.isEmpty()) {
+                                    Intent intentClose = new Intent(getContext(), TickService.class);
+                                    getActivity().stopService(intentClose);
+                                }
+                            });
                     }
                 });
         }

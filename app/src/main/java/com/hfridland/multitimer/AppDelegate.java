@@ -20,7 +20,7 @@ public class AppDelegate extends Application {
 
         sMultitimerDao =
                 Room.databaseBuilder(getApplicationContext(), MultitimerDatabase.class, "multitimer_database")
-                .allowMainThreadQueries()
+                //.allowMainThreadQueries()
                 .build().getMultitimerDao();
     }
 
