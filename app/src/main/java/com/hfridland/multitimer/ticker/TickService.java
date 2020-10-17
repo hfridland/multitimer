@@ -119,9 +119,6 @@ public class TickService extends Service {
                             intentAlarm.setComponent(cn);
                             sendBroadcast(intentAlarm);
                         }
-                    } else {
-                        Intent intentToSend = new Intent(TickReceiver.TICK_ACTION);
-                        sendBroadcast(intentToSend);
                     }
                 }
             }

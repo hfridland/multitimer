@@ -5,6 +5,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.PowerManager;
 import android.support.annotation.NonNull;
@@ -25,18 +26,21 @@ import com.hfridland.multitimer.R;
 import com.hfridland.multitimer.data.database.MultitimerDao;
 import com.hfridland.multitimer.data.model.TimerItem;
 import com.hfridland.multitimer.ticker.AlarmReceiver;
-import com.hfridland.multitimer.ticker.TickReceiver;
 import com.hfridland.multitimer.ticker.TickService;
 import com.hfridland.multitimer.ui.about.AboutActivity;
 import com.hfridland.multitimer.ui.alarm.AlarmActivity;
 import com.hfridland.multitimer.ui.alarm.AlarmFragment;
 import com.hfridland.multitimer.ui.dialogs.TimeEditorDialogFragment;
 
+import java.util.concurrent.TimeUnit;
+
+import io.reactivex.Observable;
 import io.reactivex.Single;
 import io.reactivex.android.schedulers.AndroidSchedulers;
+import io.reactivex.disposables.Disposable;
 import io.reactivex.schedulers.Schedulers;
 
-public class TimersFragment extends Fragment implements TimeEditorDialogFragment.NoticeDialogListener, TickReceiver.Ticker {
+public class TimersFragment extends Fragment implements TimeEditorDialogFragment.NoticeDialogListener {
     private RecyclerView mRecyclerView;
     private TimersAdapter mTimersAdapter;
     private final MultitimerDao mMultitimerDao = AppDelegate.getMultitimerDao();
@@ -85,7 +89,8 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                 });
         }
     };
-    private TickReceiver mTickReceiver;
+
+    private Disposable mTimerDisposable;
     private IntentFilter mIntentFilter;
 
     private PowerManager mPowerManager;
@@ -105,27 +110,26 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                 }
             });
 
-        mTickReceiver = new TickReceiver(this);
-        mIntentFilter = new IntentFilter(TickReceiver.TICK_ACTION);
-
         mPowerManager = (PowerManager) getActivity().getSystemService(Context.POWER_SERVICE);
         mWakeLock = mPowerManager.newWakeLock(PowerManager.FULL_WAKE_LOCK |
                 PowerManager.ACQUIRE_CAUSES_WAKEUP |
                 PowerManager.ON_AFTER_RELEASE, "appname::WakeLock");
 
-    }
+        mTimerDisposable = Observable.interval(500, TimeUnit.MILLISECONDS)
+                .subscribeOn(Schedulers.io())
+                .observeOn(AndroidSchedulers.mainThread())
+                .subscribe(seconds -> {
+                    mMultitimerDao.getActiveTimerItemsRx()
+                        .subscribeOn(Schedulers.io())
+                        .observeOn(AndroidSchedulers.mainThread())
+                        .subscribe(timerItems -> {
+                            if (!timerItems.isEmpty()) {
+                                mTimersAdapter.updateData();
+                            }
+                        });
+                });
 
-    @Override
-    public void onResume() {
-        super.onResume();
-        getActivity().registerReceiver(mTickReceiver, mIntentFilter);
-    }
 
-    @Override
-    public void onPause() {
-        super.onPause();
-        AppDelegate appDelegate = (AppDelegate) getActivity().getApplicationContext();
-        getActivity().unregisterReceiver(mTickReceiver);
     }
 
     public static TimersFragment newInstance() {
@@ -208,7 +212,7 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
                     wakeIntent.putExtra("NAME", timerItem.getName());
                     PendingIntent pendingIntent = PendingIntent.getActivity(getActivity(),
                             12345, wakeIntent, PendingIntent.FLAG_CANCEL_CURRENT);
-                    am.set(AlarmManager.RTC_WAKEUP, 0, pendingIntent);
+                    am.set(AlarmManager.RTC_WAKEUP, System.currentTimeMillis(), pendingIntent);
 
                     mMultitimerDao.getActiveTimerItemsRx()
                         .subscribeOn(Schedulers.io())
@@ -234,7 +238,8 @@ public class TimersFragment extends Fragment implements TimeEditorDialogFragment
     public void onDialogNegativeClick(DialogFragment dialog) { }
 
     @Override
-    public void onTick(Intent intent) {
-        mTimersAdapter.updateData();
+    public void onDestroy() {
+        super.onDestroy();
+        mTimerDisposable.dispose();
     }
 }
